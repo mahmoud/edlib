@@ -1,3 +1,5 @@
+import unicodedata
+
 cimport cython
 from libc.stdlib cimport malloc, free
 
@@ -35,11 +37,55 @@ def align(query, target, mode="NW", task="distance", k=-1, additionalEqualities=
                 e.g. cigar of "5=1X1=1I" means "5 matches, 1 mismatch, 1 match, 1 insertion (to target)".
     """
     # Transform python strings into c strings.
-    cdef bytes query_bytes = query.encode();
-    cdef char* cquery = query_bytes;
-    cdef bytes target_bytes = target.encode();
-    cdef char* ctarget = target_bytes;
+    cdef bytes query_bytes, target_bytes
+    if isinstance(query, bytes):
+        query_bytes = query
+    else:
+        query_bytes = unicodedata.normalize('NFC', query).encode('utf-8');
+    if isinstance(target, bytes):
+        target_bytes = target
+    else:
+        target_bytes = unicodedata.normalize('NFC', target).encode('utf-8');
 
+    return align_bytes(query_bytes=query_bytes,
+                       target_bytes=target_bytes,
+                       mode=mode,
+                       task=task,
+                       k=k,
+                       additionalEqualities=additionalEqualities)
+
+
+def align_bytes(bytes query_bytes, bytes target_bytes, mode="NW", task="distance", k=-1, additionalEqualities=None):
+    """ Align query with target using edit distance.
+    @param {string} query
+    @param {string} target
+    @param {string} mode  Optional. Alignment method do be used. Possible values are:
+            - 'NW' for global (default)
+            - 'HW' for infix
+            - 'SHW' for prefix.
+    @param {string} task  Optional. Tells edlib what to calculate. Less there is to calculate,
+            faster it is. Possible value are (from fastest to slowest):
+            - 'distance' - find edit distance and end locations in target. Default.
+            - 'locations' - find edit distance, end locations and start locations.
+            - 'path' - find edit distance, start and end locations and alignment path.
+    @param {int} k  Optional. Max edit distance to search for - the lower this value,
+            the faster is calculation. Set to -1 (default) to have no limit on edit distance.
+    @param {list} additionalEqualities  Optional.
+            List of pairs of characters, where each pair defines two characters as equal.
+            This way you can extend edlib's definition of equality (which is that each character is equal only
+            to itself).
+            This can be useful e.g. when you want edlib to be case insensitive, or if you want certain
+            characters to act as a wildcards.
+            Set to None (default) if you do not want to extend edlib's default equality definition.
+    @return Dictionary with following fields:
+            {int} editDistance  -1 if it is larger than k.
+            {int} alphabetLength
+            {[(int, int)]} locations  List of locations, in format [(start, end)].
+            {string} cigar  Cigar is a standard format for alignment path.
+                Here we are using extended cigar format, which uses following symbols:
+                Match: '=', Insertion to target: 'I', Deletion from target: 'D', Mismatch: 'X'.
+                e.g. cigar of "5=1X1=1I" means "5 matches, 1 mismatch, 1 match, 1 insertion (to target)".
+    """
     # Build an edlib config object based on given parameters.
     cconfig = cedlib.edlibDefaultAlignConfig()
 
@@ -72,7 +118,7 @@ def align(query, target, mode="NW", task="distance", k=-1, additionalEqualities=
         cconfig.additionalEqualitiesLength = len(additionalEqualities)
 
     # Run alignment.
-    cresult = cedlib.edlibAlign(cquery, len(query), ctarget, len(target), cconfig)
+    cresult = cedlib.edlibAlign(query_bytes, len(query_bytes), target_bytes, len(target_bytes), cconfig)
     if cconfig.additionalEqualities != NULL: free(cconfig.additionalEqualities)
 
     if cresult.status == 1:

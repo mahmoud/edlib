@@ -35,10 +35,20 @@ setup(
     keywords = "edit distance levenshtein align sequence bioinformatics",
     # Build instructions
     ext_modules = [Extension("edlib",
-                             [edlib_module_src, "edlib/src/edlib.cpp"],
+                             [edlib_module_src, '../../edlib/src/edlib.cpp'],
                              include_dirs=["edlib/include"],
                              depends=["edlib/include/edlib.h"],
                              language="c++",
                              extra_compile_args=["-O3", "-std=c++11"])],
     cmdclass = cmdclass
 )
+
+"""
+Build development version as follows:
+
+* pip install cython
+* Then, from within the directory containing this setup.py, run
+  CPATH="../../edlib/include/:$CPATH" EDLIB_USE_CYTHON=True pip install -e .
+
+Then, you should be able to run test.py.
+"""
